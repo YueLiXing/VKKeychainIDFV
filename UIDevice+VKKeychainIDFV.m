@@ -75,7 +75,10 @@
     //Delete old item before add new item
     SecItemDelete((__bridge_retained CFDictionaryRef)keychainQuery);
     //Add new object to search dictionary(Attention:the data format)
-    [keychainQuery setObject:[NSKeyedArchiver archivedDataWithRootObject:data] forKey:(__bridge_transfer id)kSecValueData];
+    NSData *d = [NSKeyedArchiver archivedDataWithRootObject:data
+                           requiringSecureCoding:YES
+                                          error:nil];
+    [keychainQuery setObject:d forKey:(__bridge_transfer id)kSecValueData];
     //Add item to keychain with the search dictionary
     SecItemAdd((__bridge_retained CFDictionaryRef)keychainQuery, NULL);
 }
@@ -88,11 +91,15 @@
     [keychainQuery setObject:(__bridge_transfer id)kSecMatchLimitOne forKey:(__bridge_transfer id)kSecMatchLimit];
     CFDataRef keyData = NULL;
     if (SecItemCopyMatching((__bridge_retained CFDictionaryRef)keychainQuery, (CFTypeRef *)&keyData) == noErr) {
-        @try {
-            ret = [NSKeyedUnarchiver unarchiveObjectWithData:(__bridge_transfer NSData *)keyData];
-        } @catch (NSException *e) {
-            NSLog(@"Unarchive of %@ failed: %@", service, e);
-        } @finally {
+        NSData *data = (__bridge_transfer NSData *)keyData;
+        NSError *unarchiveError = nil;
+        
+        // 首先尝试解档为NSString类型
+        ret = [NSKeyedUnarchiver unarchivedObjectOfClass:[NSString class]
+                                                fromData:data
+                                                   error:&unarchiveError];
+        if (!ret) {
+            NSLog(@"Keychain解档失败: 无法解析数据");
         }
     }
     return ret;
